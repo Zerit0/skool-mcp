@@ -76,17 +76,17 @@ export const postsCreateTool = {
     const metadata: Record<string, unknown> = {
       action: 0,
       content: args.content,
-      displayName: args.title,
-      pinned: 0,
+      title: args.title,
     };
     if (args.label) {
-      metadata.label = args.label;
+      metadata.labels = args.label;
     }
 
-    const result = await api2Request("/posts", {
+    const result = await api2Request("/posts?notify=false&follow=true", {
       method: "POST",
       body: {
-        groupId: args.groupId,
+        post_type: "generic",
+        group_id: args.groupId,
         metadata,
       },
     });
@@ -108,8 +108,8 @@ export const postsCommentTool = {
     const result = await api2Request("/comments", {
       method: "POST",
       body: {
-        postId: args.postId,
-        groupId: args.groupId,
+        post_id: args.postId,
+        group_id: args.groupId,
         metadata: {
           content: args.content,
         },

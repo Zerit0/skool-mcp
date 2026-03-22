@@ -94,6 +94,8 @@ export async function api2Request(
     "User-Agent": USER_AGENT,
     Cookie: config.cookies,
     Accept: "application/json",
+    Origin: "https://www.skool.com",
+    Referer: "https://www.skool.com/",
   };
 
   if (body) {
