@@ -95,6 +95,42 @@ export const postsCreateTool = {
   },
 };
 
+async function getCurrentVote(postId: string, groupId: string): Promise<string> {
+  try {
+    const data = await api2Request(`/posts/${postId}`, {
+      queryParams: { group_id: groupId },
+    }) as { metadata?: { my_vote?: string } };
+    return data?.metadata?.my_vote ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export const postsVoteTool = {
+  name: "skool_posts_vote",
+  description:
+    "Upvote or remove your upvote from a post or comment. Automatically checks current vote state to avoid toggling an existing vote. Use vote='up' to like, vote='' to unlike.",
+  inputSchema: {
+    postId: z.string().describe("The post or comment UUID to vote on"),
+    groupId: z.string().describe("The group UUID (required to fetch current vote state)"),
+    vote: z.enum(["up", ""]).default("up").describe("'up' to like, '' to remove your like"),
+  },
+  async handler(args: { postId: string; groupId: string; vote: string }) {
+    const currentVote = await getCurrentVote(args.postId, args.groupId);
+
+    if (currentVote === args.vote) {
+      return JSON.stringify({ skipped: true, reason: `Already in state '${args.vote || "no vote"}'`, postId: args.postId });
+    }
+
+    await api2Request(`/posts/${args.postId}/vote`, {
+      method: "PUT",
+      body: { old: currentVote, new: args.vote },
+    });
+
+    return JSON.stringify({ success: true, postId: args.postId, previousVote: currentVote, newVote: args.vote });
+  },
+};
+
 export const postsCommentTool = {
   name: "skool_posts_comment",
   description:
