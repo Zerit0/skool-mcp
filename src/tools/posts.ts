@@ -134,20 +134,27 @@ export const postsVoteTool = {
 export const postsCommentTool = {
   name: "skool_posts_comment",
   description:
-    "Add a comment to a post. Requires auth cookies. Posts to api2.skool.com.",
+    "Add a comment to a post or reply to an existing comment. Requires auth cookies.",
   inputSchema: {
-    postId: z.string().describe("The post UUID to comment on"),
+    postId: z.string().describe("The root post UUID to comment on"),
     groupId: z.string().describe("The group UUID"),
     content: z.string().describe("Comment text content"),
+    parentId: z.string().optional().describe("Parent comment UUID for replies (defaults to postId for top-level comments)"),
   },
-  async handler(args: { postId: string; groupId: string; content: string }) {
-    const result = await api2Request("/comments", {
+  async handler(args: { postId: string; groupId: string; content: string; parentId?: string }) {
+    const result = await api2Request("/posts?follow=false", {
       method: "POST",
       body: {
-        post_id: args.postId,
+        post_type: "comment",
         group_id: args.groupId,
+        root_id: args.postId,
+        parent_id: args.parentId ?? args.postId,
         metadata: {
+          title: "",
           content: args.content,
+          attachments: "",
+          action: 0,
+          video_ids: "",
         },
       },
     });
