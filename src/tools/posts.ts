@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { nextDataRequest, api2Request } from "../client.js";
 import { loadConfig } from "../config.js";
+import { browserPostComment, browserReplyComment } from "../browser.js";
 
 export const postsListTool = {
   name: "skool_posts_list",
@@ -134,31 +135,47 @@ export const postsVoteTool = {
 export const postsCommentTool = {
   name: "skool_posts_comment",
   description:
-    "Add a comment to a post or reply to an existing comment. Requires auth cookies.",
+    "Add a comment or reply to a Skool post via browser (bypasses WAF). " +
+    "For top-level comments, automatically @mentions the post creator by typing '@' and waiting for the suggestion dropdown. " +
+    "For replies, provide parentCommentSnippet to find the parent comment — clicking Reply auto-fills the @mention of its author. " +
+    "Requires community slug and post slug from the URL (e.g. skool.com/sim-club/mi-avatar-esta-listo).",
   inputSchema: {
-    postId: z.string().describe("The root post UUID to comment on"),
-    groupId: z.string().describe("The group UUID"),
-    content: z.string().describe("Comment text content"),
-    parentId: z.string().optional().describe("Parent comment UUID for replies (defaults to postId for top-level comments)"),
+    community: z.string().optional().describe("Community slug (e.g. 'sim-club'). Uses default from config if omitted."),
+    postSlug: z.string().describe("Post slug from the URL (e.g. 'mi-avatar-esta-listo')"),
+    content: z.string().describe("Comment text WITHOUT any @mention — the mention is added automatically"),
+    mentionCreator: z.boolean().default(true).describe("Auto-mention the post creator for top-level comments. Default true."),
+    parentCommentSnippet: z.string().optional().describe("Short unique text snippet from the comment to reply to. If provided, clicks Reply on that comment (auto-fills @mention of its author)."),
   },
-  async handler(args: { postId: string; groupId: string; content: string; parentId?: string }) {
-    const result = await api2Request("/posts?follow=false", {
-      method: "POST",
-      body: {
-        post_type: "comment",
-        group_id: args.groupId,
-        root_id: args.postId,
-        parent_id: args.parentId ?? args.postId,
-        metadata: {
-          title: "",
-          content: args.content,
-          attachments: "",
-          action: 0,
-          video_ids: "",
-        },
-      },
-    });
+  async handler(args: {
+    community?: string;
+    postSlug: string;
+    content: string;
+    mentionCreator?: boolean;
+    parentCommentSnippet?: string;
+  }) {
+    const config = await loadConfig();
+    const community = args.community ?? config.defaultCommunity;
+    if (!community) throw new Error("No community specified and no defaultCommunity in config");
 
-    return JSON.stringify(result, null, 2);
+    let rawBody: string;
+
+    if (args.parentCommentSnippet) {
+      rawBody = await browserReplyComment({
+        community,
+        postSlug: args.postSlug,
+        parentCommentSnippet: args.parentCommentSnippet,
+        content: args.content,
+      });
+    } else {
+      rawBody = await browserPostComment({
+        community,
+        postSlug: args.postSlug,
+        content: args.content,
+        mentionCreator: args.mentionCreator ?? true,
+      });
+    }
+
+    if (!rawBody) return JSON.stringify({ warning: "Comment submitted but no response body captured" });
+    try { return JSON.stringify(JSON.parse(rawBody), null, 2); } catch { return rawBody; }
   },
 };
