@@ -1,10 +1,10 @@
-import { chromium } from "playwright";
+import { chromium, type BrowserContextOptions } from "playwright";
 import { loadConfig } from "./config.js";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-async function buildContext() {
+async function buildContext(options: { viewportWidth?: number; viewportHeight?: number } = {}) {
   const config = await loadConfig();
 
   const cookies = config.cookies
@@ -25,9 +25,79 @@ async function buildContext() {
     });
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ userAgent: USER_AGENT });
+  const contextOptions: BrowserContextOptions = { userAgent: USER_AGENT };
+  if (options.viewportWidth || options.viewportHeight) {
+    contextOptions.viewport = {
+      width: options.viewportWidth ?? 1280,
+      height: options.viewportHeight ?? 720,
+    };
+  }
+
+  const context = await browser.newContext(contextOptions);
   await context.addCookies(cookies);
   return { browser, context };
+}
+
+export interface BrowserPostScreenshotResult {
+  success: boolean;
+  path: string;
+  url: string;
+  postSlug: string;
+  fullPage: boolean;
+}
+
+export async function browserPostScreenshot(args: {
+  community: string;
+  postSlug: string;
+  outputPath: string;
+  fullPage?: boolean;
+  viewportWidth?: number;
+  viewportHeight?: number;
+}): Promise<BrowserPostScreenshotResult> {
+  const { browser, context } = await buildContext({
+    viewportWidth: args.viewportWidth,
+    viewportHeight: args.viewportHeight,
+  });
+  const page = await context.newPage();
+  const fullPage = args.fullPage ?? false;
+  const url = `https://www.skool.com/${args.community}/${args.postSlug}`;
+
+  page.on("download", (download) => {
+    void download.cancel().catch(() => undefined);
+  });
+
+  await page.route("**/*", (route) => {
+    if (route.request().resourceType() === "media") {
+      return route.abort();
+    }
+    return route.continue();
+  });
+
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForSelector("body", { timeout: 10000 });
+    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
+    await page.waitForTimeout(3000);
+
+    await page.screenshot({
+      path: args.outputPath,
+      fullPage,
+      type: "png",
+      animations: "disabled",
+      caret: "hide",
+      timeout: 60000,
+    });
+
+    return {
+      success: true,
+      path: args.outputPath,
+      url,
+      postSlug: args.postSlug,
+      fullPage,
+    };
+  } finally {
+    await browser.close();
+  }
 }
 
 /**

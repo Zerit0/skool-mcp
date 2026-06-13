@@ -7,6 +7,7 @@ import { requestTool } from "./tools/request.js";
 import { communityInfoTool, communityLabelsTool } from "./tools/community.js";
 import { membersListTool, membersPendingTool, membersApproveTool, membersRejectTool } from "./tools/members.js";
 import { postsListTool, postsGetTool, postsCreateTool, postsCommentTool, postsVoteTool } from "./tools/posts.js";
+import { postScreenshotTool } from "./tools/screenshot.js";
 import { coursesListTool, lessonsListTool } from "./tools/classroom.js";
 import { notificationsTool } from "./tools/notifications.js";
 
@@ -103,6 +104,13 @@ server.tool(
   postsVoteTool.description,
   postsVoteTool.inputSchema,
   async (args) => ({ content: [{ type: "text", text: await postsVoteTool.handler(args as { postId: string; groupId: string; vote: string }) }] }),
+);
+
+server.tool(
+  postScreenshotTool.name,
+  postScreenshotTool.description,
+  postScreenshotTool.inputSchema,
+  async (args) => ({ content: [{ type: "text", text: await postScreenshotTool.handler(args) }] }),
 );
 
 // Classroom
