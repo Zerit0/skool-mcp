@@ -2,6 +2,8 @@ import { z } from "zod";
 import { nextDataRequest, api2Request } from "../client.js";
 import { loadConfig } from "../config.js";
 
+const accountParam = z.string().optional().describe("Account name from config (e.g. 'piqueran'). Uses defaultAccount if omitted.");
+
 export const coursesListTool = {
   name: "skool_courses_list",
   description:
@@ -9,21 +11,21 @@ export const coursesListTool = {
   inputSchema: {
     community: z.string().optional().describe("Community slug. Uses default from config if omitted."),
     groupId: z.string().optional().describe("Group UUID — if provided, uses api2.skool.com for richer data"),
+    account: accountParam,
   },
-  async handler(args: { community?: string; groupId?: string }) {
-    // If groupId is given, prefer api2 for structured data
+  async handler(args: { community?: string; groupId?: string; account?: string }) {
     if (args.groupId) {
-      const result = await api2Request(`/groups/${args.groupId}/courses`);
+      const result = await api2Request(`/groups/${args.groupId}/courses`, { account: args.account });
       return JSON.stringify(result, null, 2);
     }
 
-    const config = await loadConfig();
+    const config = await loadConfig(args.account);
     const slug = args.community || config.defaultCommunity;
     if (!slug) throw new Error("No community specified and no defaultCommunity in config");
 
     const data = (await nextDataRequest(`/${slug}/classroom`, {
       group: slug,
-    })) as { pageProps?: Record<string, unknown> };
+    }, args.account)) as { pageProps?: Record<string, unknown> };
 
     const props = data?.pageProps;
     if (!props) throw new Error("No pageProps in response");
@@ -39,16 +41,17 @@ export const lessonsListTool = {
   inputSchema: {
     community: z.string().optional().describe("Community slug. Uses default from config if omitted."),
     courseSlug: z.string().describe("The course slug/name to list lessons for"),
+    account: accountParam,
   },
-  async handler(args: { community?: string; courseSlug: string }) {
-    const config = await loadConfig();
+  async handler(args: { community?: string; courseSlug: string; account?: string }) {
+    const config = await loadConfig(args.account);
     const slug = args.community || config.defaultCommunity;
     if (!slug) throw new Error("No community specified and no defaultCommunity in config");
 
     const data = (await nextDataRequest(`/${slug}/classroom/${args.courseSlug}`, {
       group: slug,
       course: args.courseSlug,
-    })) as { pageProps?: Record<string, unknown> };
+    }, args.account)) as { pageProps?: Record<string, unknown> };
 
     const props = data?.pageProps;
     if (!props) throw new Error("No pageProps in response");

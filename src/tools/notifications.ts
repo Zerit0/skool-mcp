@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rawRequest } from "../client.js";
+import { rawRequest, nextDataRequest } from "../client.js";
 import { loadConfig } from "../config.js";
 
 export const notificationsTool = {
@@ -8,17 +8,15 @@ export const notificationsTool = {
     "Get recent notifications. Tries the Next.js notifications page data route.",
   inputSchema: {
     page: z.number().default(1).describe("Page number"),
+    account: z.string().optional().describe("Account name from config (e.g. 'piqueran'). Uses defaultAccount if omitted."),
   },
-  async handler(args: { page: number }) {
-    const config = await loadConfig();
-
-    // Notifications are likely at a user-level route
-    const { nextDataRequest } = await import("../client.js");
+  async handler(args: { page: number; account?: string }) {
+    const config = await loadConfig(args.account);
 
     try {
       const data = (await nextDataRequest("/notifications", {
         p: String(args.page),
-      })) as { pageProps?: Record<string, unknown> };
+      }, args.account)) as { pageProps?: Record<string, unknown> };
 
       const props = data?.pageProps;
       if (!props) throw new Error("No pageProps in response");
@@ -27,10 +25,9 @@ export const notificationsTool = {
       // Fallback: try the www.skool.com route directly
       const result = await rawRequest(
         `${config.baseUrl}/notifications?p=${args.page}`,
-        { method: "GET" },
+        { method: "GET", account: args.account },
       );
 
-      // Try to parse __NEXT_DATA__ from HTML
       const match = result.body.match(
         /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
       );

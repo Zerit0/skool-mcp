@@ -8,6 +8,7 @@ import { communityInfoTool, communityLabelsTool } from "./tools/community.js";
 import { membersListTool, membersPendingTool, membersApproveTool, membersRejectTool } from "./tools/members.js";
 import { postsListTool, postsGetTool, postsCreateTool, postsCommentTool, postsVoteTool } from "./tools/posts.js";
 import { postScreenshotTool } from "./tools/screenshot.js";
+import { videoDiscoverTool } from "./tools/videos.js";
 import { coursesListTool, lessonsListTool } from "./tools/classroom.js";
 import { notificationsTool } from "./tools/notifications.js";
 
@@ -111,6 +112,13 @@ server.tool(
   postScreenshotTool.description,
   postScreenshotTool.inputSchema,
   async (args) => ({ content: [{ type: "text", text: await postScreenshotTool.handler(args) }] }),
+);
+
+server.tool(
+  videoDiscoverTool.name,
+  videoDiscoverTool.description,
+  videoDiscoverTool.inputSchema,
+  async (args) => ({ content: [{ type: "text", text: await videoDiscoverTool.handler(args) }] }),
 );
 
 // Classroom

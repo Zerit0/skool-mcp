@@ -3,6 +3,8 @@ import { nextDataRequest, api2Request } from "../client.js";
 import { loadConfig } from "../config.js";
 import { browserPostComment, browserReplyComment } from "../browser.js";
 
+const accountParam = z.string().optional().describe("Account name from config (e.g. 'piqueran'). Uses defaultAccount if omitted.");
+
 export const postsListTool = {
   name: "skool_posts_list",
   description:
@@ -12,9 +14,10 @@ export const postsListTool = {
     category: z.string().optional().describe("Category/label UUID to filter by"),
     page: z.number().default(1).describe("Page number (1-based)"),
     sort: z.enum(["newest-cm", "newest", "top"]).default("newest-cm").describe("Sort order: newest-cm (recent activity), newest (created), top (most liked)"),
+    account: accountParam,
   },
-  async handler(args: { community?: string; category?: string; page: number; sort: string }) {
-    const config = await loadConfig();
+  async handler(args: { community?: string; category?: string; page: number; sort: string; account?: string }) {
+    const config = await loadConfig(args.account);
     const slug = args.community || config.defaultCommunity;
     if (!slug) throw new Error("No community specified and no defaultCommunity in config");
 
@@ -27,7 +30,7 @@ export const postsListTool = {
       params.c = args.category;
     }
 
-    const data = (await nextDataRequest(`/${slug}`, params)) as {
+    const data = (await nextDataRequest(`/${slug}`, params, args.account)) as {
       pageProps?: Record<string, unknown>;
     };
 
@@ -45,16 +48,17 @@ export const postsGetTool = {
   inputSchema: {
     community: z.string().optional().describe("Community slug. Uses default from config if omitted."),
     postSlug: z.string().describe("The post slug/name (from the 'name' field in posts list)"),
+    account: accountParam,
   },
-  async handler(args: { community?: string; postSlug: string }) {
-    const config = await loadConfig();
+  async handler(args: { community?: string; postSlug: string; account?: string }) {
+    const config = await loadConfig(args.account);
     const slug = args.community || config.defaultCommunity;
     if (!slug) throw new Error("No community specified and no defaultCommunity in config");
 
     const data = (await nextDataRequest(`/${slug}/${args.postSlug}`, {
       group: slug,
       p: args.postSlug,
-    })) as { pageProps?: Record<string, unknown> };
+    }, args.account)) as { pageProps?: Record<string, unknown> };
 
     const props = data?.pageProps;
     if (!props) throw new Error("No pageProps in response");
@@ -72,8 +76,9 @@ export const postsCreateTool = {
     title: z.string().describe("Post title"),
     content: z.string().describe("Post body content"),
     label: z.string().optional().describe("Category label UUID"),
+    account: accountParam,
   },
-  async handler(args: { groupId: string; title: string; content: string; label?: string }) {
+  async handler(args: { groupId: string; title: string; content: string; label?: string; account?: string }) {
     const metadata: Record<string, unknown> = {
       action: 0,
       content: args.content,
@@ -90,16 +95,18 @@ export const postsCreateTool = {
         group_id: args.groupId,
         metadata,
       },
+      account: args.account,
     });
 
     return JSON.stringify(result, null, 2);
   },
 };
 
-async function getCurrentVote(postId: string, groupId: string): Promise<string> {
+async function getCurrentVote(postId: string, groupId: string, account?: string): Promise<string> {
   try {
     const data = await api2Request(`/posts/${postId}`, {
       queryParams: { group_id: groupId },
+      account,
     }) as { metadata?: { my_vote?: string } };
     return data?.metadata?.my_vote ?? "";
   } catch {
@@ -115,9 +122,10 @@ export const postsVoteTool = {
     postId: z.string().describe("The post or comment UUID to vote on"),
     groupId: z.string().describe("The group UUID (required to fetch current vote state)"),
     vote: z.enum(["up", ""]).default("up").describe("'up' to like, '' to remove your like"),
+    account: accountParam,
   },
-  async handler(args: { postId: string; groupId: string; vote: string }) {
-    const currentVote = await getCurrentVote(args.postId, args.groupId);
+  async handler(args: { postId: string; groupId: string; vote: string; account?: string }) {
+    const currentVote = await getCurrentVote(args.postId, args.groupId, args.account);
 
     if (currentVote === args.vote) {
       return JSON.stringify({ skipped: true, reason: `Already in state '${args.vote || "no vote"}'`, postId: args.postId });
@@ -126,6 +134,7 @@ export const postsVoteTool = {
     await api2Request(`/posts/${args.postId}/vote`, {
       method: "PUT",
       body: { old: currentVote, new: args.vote },
+      account: args.account,
     });
 
     return JSON.stringify({ success: true, postId: args.postId, previousVote: currentVote, newVote: args.vote });
@@ -145,6 +154,7 @@ export const postsCommentTool = {
     content: z.string().describe("Comment text WITHOUT any @mention — the mention is added automatically"),
     mentionCreator: z.boolean().default(true).describe("Auto-mention the post creator for top-level comments. Default true."),
     parentCommentSnippet: z.string().optional().describe("Short unique text snippet from the comment to reply to. If provided, clicks Reply on that comment (auto-fills @mention of its author)."),
+    account: accountParam,
   },
   async handler(args: {
     community?: string;
@@ -152,8 +162,9 @@ export const postsCommentTool = {
     content: string;
     mentionCreator?: boolean;
     parentCommentSnippet?: string;
+    account?: string;
   }) {
-    const config = await loadConfig();
+    const config = await loadConfig(args.account);
     const community = args.community ?? config.defaultCommunity;
     if (!community) throw new Error("No community specified and no defaultCommunity in config");
 
@@ -165,6 +176,7 @@ export const postsCommentTool = {
         postSlug: args.postSlug,
         parentCommentSnippet: args.parentCommentSnippet,
         content: args.content,
+        account: args.account,
       });
     } else {
       rawBody = await browserPostComment({
@@ -172,6 +184,7 @@ export const postsCommentTool = {
         postSlug: args.postSlug,
         content: args.content,
         mentionCreator: args.mentionCreator ?? true,
+        account: args.account,
       });
     }
 

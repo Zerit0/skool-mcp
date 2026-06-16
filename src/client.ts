@@ -1,8 +1,10 @@
 import { loadConfig, type SkoolConfig } from "./config.js";
+import { assertAllowedSkoolUrl } from "./urlSafety.js";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+// buildId is a Next.js deploy artifact — the same for all accounts, so one cache is fine.
 let buildIdCache: { id: string; fetchedAt: number } | null = null;
 const BUILD_ID_TTL = 30 * 60 * 1000; // 30 minutes
 
@@ -14,7 +16,7 @@ export async function getBuildId(config: SkoolConfig): Promise<string> {
     return buildIdCache.id;
   }
 
-  const res = await fetch(config.baseUrl, {
+  const res = await fetch(assertAllowedSkoolUrl(config.baseUrl).toString(), {
     headers: {
       "User-Agent": USER_AGENT,
       Cookie: config.cookies,
@@ -26,14 +28,13 @@ export async function getBuildId(config: SkoolConfig): Promise<string> {
   }
 
   const html = await res.text();
-  // Look for buildId in __NEXT_DATA__ JSON
   const match = html.match(/"buildId"\s*:\s*"([^"]+)"/);
   if (!match) {
     throw new Error("Could not extract buildId from Skool HTML");
   }
 
   buildIdCache = { id: match[1], fetchedAt: Date.now() };
-  return match[1];
+  return buildIdCache.id;
 }
 
 /**
@@ -42,8 +43,9 @@ export async function getBuildId(config: SkoolConfig): Promise<string> {
 export async function nextDataRequest(
   path: string,
   queryParams?: Record<string, string>,
+  account?: string,
 ): Promise<unknown> {
-  const config = await loadConfig();
+  const config = await loadConfig(account);
   const buildId = await getBuildId(config);
 
   const url = new URL(`/_next/data/${buildId}${path}.json`, config.baseUrl);
@@ -53,7 +55,7 @@ export async function nextDataRequest(
     }
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(assertAllowedSkoolUrl(url).toString(), {
     headers: {
       "User-Agent": USER_AGENT,
       Cookie: config.cookies,
@@ -78,9 +80,10 @@ export async function api2Request(
     method?: string;
     body?: unknown;
     queryParams?: Record<string, string>;
+    account?: string;
   } = {},
 ): Promise<unknown> {
-  const config = await loadConfig();
+  const config = await loadConfig(options.account);
   const { method = "GET", body, queryParams } = options;
 
   const url = new URL(path, "https://api2.skool.com");
@@ -102,7 +105,7 @@ export async function api2Request(
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(assertAllowedSkoolUrl(url).toString(), {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -129,12 +132,15 @@ export async function rawRequest(
     method?: string;
     headers?: Record<string, string>;
     body?: string;
+    account?: string;
   } = {},
 ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
-  const config = await loadConfig();
+  const config = await loadConfig(options.account);
   const { method = "GET", headers: extraHeaders = {}, body } = options;
 
-  const res = await fetch(url, {
+  const safeUrl = assertAllowedSkoolUrl(url);
+
+  const res = await fetch(safeUrl.toString(), {
     method,
     headers: {
       "User-Agent": USER_AGENT,
