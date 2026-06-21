@@ -9,7 +9,7 @@ import { membersListTool, membersPendingTool, membersApproveTool, membersRejectT
 import { postsListTool, postsGetTool, postsCreateTool, postsCommentTool, postsVoteTool } from "./tools/posts.js";
 import { postScreenshotTool } from "./tools/screenshot.js";
 import { videoDiscoverTool } from "./tools/videos.js";
-import { coursesListTool, lessonsListTool } from "./tools/classroom.js";
+import { coursesListTool, lessonsListTool, lessonGetTool, courseExportTool } from "./tools/classroom.js";
 import { notificationsTool } from "./tools/notifications.js";
 
 const server = new McpServer({
@@ -134,6 +134,20 @@ server.tool(
   lessonsListTool.description,
   lessonsListTool.inputSchema,
   async (args) => ({ content: [{ type: "text", text: await lessonsListTool.handler(args) }] }),
+);
+
+server.tool(
+  lessonGetTool.name,
+  lessonGetTool.description,
+  lessonGetTool.inputSchema,
+  async (args) => ({ content: [{ type: "text", text: await lessonGetTool.handler(args) }] }),
+);
+
+server.tool(
+  courseExportTool.name,
+  courseExportTool.description,
+  courseExportTool.inputSchema,
+  async (args) => ({ content: [{ type: "text", text: await courseExportTool.handler(args) }] }),
 );
 
 // Notifications
